@@ -8,7 +8,10 @@ interface Params {
 
 export async function GET(req: NextRequest, { params }: Params) {
   const { code } = await params;
-  const room = RoomManager.getRoom(code);
+  let room = RoomManager.getRoom(code);
+  if (!room) {
+    room = await RoomManager.getRoomAsync(code);
+  }
 
   if (!room) {
     return NextResponse.json(
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       );
     }
 
-    const result = RoomManager.joinRoom(code, {
+    const result = await RoomManager.joinRoom(code, {
       id: userId,
       nickname: nickname.trim().slice(0, 15),
       avatar: avatar || 'bunny',

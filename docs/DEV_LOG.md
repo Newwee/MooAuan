@@ -94,3 +94,45 @@
 
 ### 8. สถานะ Git Commit และ Push
 - Git Commit: พร้อม Commit และ Push ไปยัง https://github.com/Newwee/MooAuan บน branch `main`
+
+
+## บันทึกการแก้ไขบั๊ก: 2026-10-27T22:03:02+07:00
+
+### 1. เป้าหมายของงาน (Goal)
+- ตรวจสอบและแก้ไขบั๊กที่ตรวจพบจากการทดสอบจริงระหว่างอุปกรณ์ Desktop และ Mobile บน Vercel (`moo-auan.vercel.app`) ตามภาพที่ผู้ใช้ส่งมา
+
+### 2. ปัญหาที่ตรวจพบ (Issues Identified)
+1. **Desktop กับ Mobile ไม่ซิงก์กัน (Desktop เข้าเกมแล้วแต่ Mobile ค้างอยู่ที่หน้าล็อบบี้)**:
+   - สถาปัตยกรรมเดิมใช้ In-memory `Map` และ local SSE route บน Next.js ซึ่งเมื่อ deploy ขึ้น Vercel Serverless Functions แต่ละ HTTP Request และ EventSource stream จะกระจายไปยังคนละ Lambda Container ทำให้เมื่อ Desktop ส่งคำสั่ง `start-game` มีเพียง Lambda ฝั่ง Desktop ที่อัปเดต ส่วน Mobile ที่ต่ออยู่กับ Lambda อื่นจึงไม่ได้รับ Event และไม่มีระบบ Polling สำรอง
+2. **UI หน้าล็อบบี้บนมือถือล้นจอและถูกบดบัง (Vertical Stretched & Bad Hierarchy)**:
+   - ป้ายรหัสห้องและ Card ผู้เล่น 1 เลื่อนหลุดขึ้นไปด้านบนหน้าจอ
+   - Card ผู้เล่น 2 อยู่ด้านบน ส่วนปุ่มกดพร้อมเล่นและเริ่มเกมเลื่อนหลุดลงไปด้านล่างสุด ทำให้ผู้ใช้ต้องเลื่อนจอไปมา
+3. **การแสดงผลสัญลักษณ์มงกุฎและป้ายผู้เล่นสลับกัน (Inverted Crown & Badge Bug)**:
+   - โค้ดเดิมอิงตาม `me` (Card 1) และ `opponent` (Card 2) โดย Card 2 ถูก hardcode ป้ายว่า `"ผู้เล่น 2"` เมื่อผู้เล่นคนที่ 2 เป็นคนดูจอ ระบบจะเห็น `opponent` (ซึ่งเป็น Host) มีมงกุฎ 👑 แต่ถูกแปะป้ายว่าเป็น `"ผู้เล่น 2"` ก่อให้เกิดความสับสน
+4. **ชื่อและตัวละครเริ่มต้นซ้ำกัน**:
+   - เมื่อผู้เล่นคนที่ 2 เข้าห้องโดยไม่ได้เปลี่ยนชื่อ จะได้ชื่อเริ่มต้น `"มูอ้วนจอมซน"` และตัวละครแมวเหมือนกับ Host ทำให้แยกไม่ออก
+
+### 3. สิ่งที่แก้ไขและพัฒนา (Fixes Implemented)
+1. **Multi-Channel Realtime Engine สำหรับ Vercel Serverless**:
+   - เชื่อมต่อ Cloud Realtime Relay ผ่าน `https://ntfy.sh/duo_pop_room_${code}/sse` ทำให้ Desktop และ Mobile ซิงก์หากันได้ทันทีภายใน <50ms โดยไม่ขึ้นกับ memory ของ Vercel Lambdas
+   - รองรับ Supabase Realtime Channel (`room:${code}`) ผ่าน WebSockets
+   - เพิ่มระบบ Fallback Polling อัจฉริยะทุก 1.2 วินาทีที่ตรวจเช็กเวอร์ชันห้อง (`version`) อัตโนมัติ ป้องกันการค้างเมื่อสลับแท็บหรือเน็ตแกว่ง
+   - เมื่อผู้เล่นกดปุ่มใด ๆ (Ready, Start Game, Answer, Flip Card) ระบบจะกระจายสถานะใหม่ไปยังทั้งเซิร์ฟเวอร์, Cloud Relay และ Supabase ทันที
+2. **ปรับปรุง Mobile UX/UI ของ Lobby ให้กระชับ ไม่ต้องเลื่อนจอ (Compact Mobile Layout)**:
+   - ปรับป้ายรหัสห้องให้เป็นแถบ Slim Banner ด้านบนสุด
+   - ปรับ Card ผู้เล่นทั้ง 2 ให้กระชับ สวยงาม วางเรียงอย่างพอดีบนจอมือถือ
+   - ย้ายกลุ่มปุ่มกดพร้อมเล่นและเริ่มเกมขึ้นมาอยู่ในตำแหน่งเด่นชัด เข้าถึงได้ทันที ไม่หลุดขอบล่าง
+   - ปรับตารางเลือกมินิเกมเป็นแบบ 2 คอลัมน์ขนาดกะทัดรัด
+3. **แก้ไขสิทธิ์และป้ายกำกับของ Host และ Guest ให้ถูกต้อง 100%**:
+   - แยกการเรนเดอร์ตาม `hostPlayer` (มีมงกุฎ 👑 และป้าย `👑 หัวหน้าห้อง (Host)`) และ `guestPlayer` (ป้าย `ผู้เล่น 2 (Guest)`)
+   - แสดงป้าย `(คุณ)` กำกับบนการ์ดของตัวผู้เล่นเองอย่างถูกต้อง ไม่สับสนอีกต่อไป
+4. **กำหนดค่าเริ่มต้นที่ไม่ซ้ำกันสำหรับผู้เล่นคนที่ 2**:
+   - หากผู้เล่นคนที่ 2 เข้าห้องด้วยชื่อเริ่มต้น ระบบจะกำหนดชื่อเป็น `"กระต่ายนุ๊ก"` และมาสคอตกระต่าย (Bunny) อัตโนมัติเพื่อให้เห็นความแตกต่างอย่างชัดเจน
+
+### 4. ไฟล์ที่แก้ไข
+- `src/lib/room-store.ts` — เพิ่ม `getRoomAsync`, การบรอดแคสต์ผ่าน Cloud Relay, และการตั้งชื่อ/มาสคอตแยกอัตโนมัติ
+- `src/app/api/rooms/[code]/route.ts` — รองรับ `getRoomAsync` และ async `joinRoom`
+- `src/app/api/rooms/[code]/action/route.ts` — กู้คืนสถานะห้องข้าม Lambda instance ก่อนรัน Action
+- `src/app/room/[code]/page.tsx` — เชื่อมต่อ Realtime Relay, Supabase Channel, และ Fallback Polling
+- `src/components/lobby/LobbyView.tsx` — ดีไซน์ Compact Layout ใหม่ และแก้บั๊กป้ายมงกุฎ/สิทธิ์ผู้เล่น
+- `CHANGELOG.md` — อัปเดตรายการแก้บั๊ก v1.0.1

@@ -20,6 +20,15 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'ข้อมูลไม่ถูกต้อง' }, { status: 400 });
     }
 
+    // Ensure room is loaded in memory for this lambda instance
+    let room = RoomManager.getRoom(code);
+    if (!room) {
+      room = await RoomManager.getRoomAsync(code);
+    }
+    if (!room) {
+      return NextResponse.json({ error: 'ไม่พบห้องที่ระบุ' }, { status: 404 });
+    }
+
     let updatedRoom = null;
 
     switch (action) {

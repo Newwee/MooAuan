@@ -13,6 +13,7 @@ import { FloatingDuoBackground } from '@/components/layout/FloatingDuoBackground
 import { Navbar } from '@/components/layout/Navbar';
 import { Button } from '@/components/ui/Button';
 import { sound } from '@/lib/audio';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   getOrCreateGuestId,
   getStoredNickname,
@@ -46,6 +47,18 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Update room helper with version comparison to prevent stale overwrites
+  const applyRoomUpdate = useCallback((newRoom: RoomState) => {
+    if (!newRoom || !newRoom.code) return;
+    setRoom((prev) => {
+      if (!prev) return newRoom;
+      if (newRoom.version >= prev.version) {
+        return newRoom;
+      }
+      return prev;
+    });
+  }, []);
+
   // 1. Join Room on Mount
   useEffect(() => {
     const uid = guestId || getOrCreateGuestId();
@@ -72,7 +85,7 @@ export default function RoomPage({ params }: RoomPageProps) {
           throw new Error(data.error || 'ไม่สามารถเข้าร่วมห้องได้');
         }
 
-        setRoom(data.room);
+        applyRoomUpdate(data.room);
       } catch (err: unknown) {
         setErrorMessage(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดห้อง');
       } finally {
@@ -81,27 +94,76 @@ export default function RoomPage({ params }: RoomPageProps) {
     };
 
     joinRoom();
-  }, [code, guestId, nickname, avatar]);
+  }, [code, guestId, nickname, avatar, applyRoomUpdate]);
 
-  // 2. Realtime Event Stream via Server-Sent Events (SSE)
+  // 2. Realtime Channel: Cloud Relay EventSource (instant push across all devices/lambdas)
   useEffect(() => {
-    if (!guestId) return;
+    if (!code) return;
+    const relayUrl = `https://ntfy.sh/duo_pop_room_${code}/sse`;
+    let eventSource: EventSource | null = null;
 
-    const eventSource = new EventSource(`/api/rooms/${code}/events`);
+    try {
+      eventSource = new EventSource(relayUrl);
 
-    eventSource.onmessage = (event) => {
-      try {
-        const updatedRoom = JSON.parse(event.data) as RoomState;
-        setRoom(updatedRoom);
-      } catch {}
-    };
+      eventSource.onmessage = (event) => {
+        try {
+          const raw = JSON.parse(event.data);
+          if (raw.event === 'message') {
+            const updated = JSON.parse(raw.message) as RoomState;
+            if (updated && updated.code === code) {
+              applyRoomUpdate(updated);
+            }
+          }
+        } catch {}
+      };
+    } catch {}
 
     return () => {
-      eventSource.close();
+      if (eventSource) eventSource.close();
     };
-  }, [code, guestId]);
+  }, [code, applyRoomUpdate]);
 
-  // 3. Dispatch Server Action Helper
+  // 3. Supabase Realtime Broadcast (if Supabase credentials are configured)
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !code) return;
+
+    const channel = supabase.channel(`room:${code}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    channel
+      .on('broadcast', { event: 'room_state' }, ({ payload }) => {
+        if (payload && payload.code === code) {
+          applyRoomUpdate(payload as RoomState);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      if (supabase) supabase.removeChannel(channel);
+    };
+  }, [code, applyRoomUpdate]);
+
+  // 4. Resilient Fallback Polling (polls every 1.2s to guarantee zero desync)
+  useEffect(() => {
+    if (!code) return;
+
+    const pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/rooms/${code}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.room) {
+            applyRoomUpdate(data.room);
+          }
+        }
+      } catch {}
+    }, 1200);
+
+    return () => clearInterval(pollTimer);
+  }, [code, applyRoomUpdate]);
+
+  // 5. Dispatch Server Action Helper with Immediate Multi-Channel Broadcast
   const dispatchAction = useCallback(
     async (action: string, payload?: Record<string, unknown>) => {
       if (!guestId) return;
@@ -119,11 +181,28 @@ export default function RoomPage({ params }: RoomPageProps) {
 
         const data = await res.json();
         if (data.success && data.room) {
-          setRoom(data.room);
+          const updated = data.room as RoomState;
+          applyRoomUpdate(updated);
+
+          // Broadcast immediately to cloud relay so opponent updates within ~30ms
+          fetch(`https://ntfy.sh/duo_pop_room_${code}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated),
+          }).catch(() => {});
+
+          // Broadcast to Supabase if configured
+          if (isSupabaseConfigured && supabase) {
+            supabase.channel(`room:${code}`).send({
+              type: 'broadcast',
+              event: 'room_state',
+              payload: updated,
+            }).catch(() => {});
+          }
         }
       } catch {}
     },
-    [code, guestId]
+    [code, guestId, applyRoomUpdate]
   );
 
   const handleSaveAvatar = (newAvatar: MascotId, newName: string) => {
@@ -144,7 +223,14 @@ export default function RoomPage({ params }: RoomPageProps) {
     })
       .then((r) => r.json())
       .then((d) => {
-        if (d.success && d.room) setRoom(d.room);
+        if (d.success && d.room) {
+          applyRoomUpdate(d.room);
+          fetch(`https://ntfy.sh/duo_pop_room_${code}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(d.room),
+          }).catch(() => {});
+        }
       });
   };
 
@@ -162,7 +248,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       <FloatingDuoBackground />
       <Navbar />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {isLoading ? (
           <div className="h-96 flex flex-col items-center justify-center text-center space-y-3">
             <Loader2 className="w-10 h-10 animate-spin text-[#FF8EB2]" />

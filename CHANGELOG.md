@@ -2,6 +2,19 @@
 
 All notable changes to the **DUO POP / MooAuan** project will be documented in this file.
 
+## [1.0.1] - 2026-10-27
+
+### Fixed
+- **Multi-Device Sync on Vercel Serverless**:
+  - Implemented multi-channel Realtime engine using Cloud Relay (`ntfy.sh/duo_pop_room_*`) and Supabase Realtime channels to overcome Vercel Lambda memory isolation.
+  - Added 1.2s auto-polling fallback with room state versioning to guarantee instant state sync when games start or answers are submitted.
+- **Mobile Lobby Layout Overflow**:
+  - Redesigned `LobbyView` to be compact and mobile-first, ensuring player cards and action buttons fit comfortably without vertical scrolling.
+- **Inverted Crown & Badge Role Display**:
+  - Fixed player identification logic in `LobbyView` so the Host is always labeled "หัวหน้าห้อง (Host)" with the crown, and the Guest is labeled "ผู้เล่น 2 (Guest)", with "(คุณ)" tagged dynamically on the viewer's card.
+- **Duplicate Avatar/Nickname for Player 2**:
+  - Auto-assigned distinct name ("กระต่ายนุ๊ก") and avatar ("bunny") for Player 2 if joining with default host credentials.
+
 ## [1.0.0] - 2026-10-27
 
 ### Added

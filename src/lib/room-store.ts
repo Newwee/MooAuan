@@ -40,9 +40,40 @@ if (!global.__DUO_POP_ROOM_STORE__) {
 const store = global.__DUO_POP_ROOM_STORE__;
 
 export class RoomManager {
-  // Get room by code
+  // Get room by code (sync)
   public static getRoom(code: string): RoomState | null {
     return store.rooms.get(code.toUpperCase()) || null;
+  }
+
+  // Get room by code (async with cross-lambda cloud relay fallback)
+  public static async getRoomAsync(code: string): Promise<RoomState | null> {
+    const upperCode = code.toUpperCase();
+    const local = store.rooms.get(upperCode);
+    if (local) return local;
+
+    try {
+      const res = await fetch(`https://ntfy.sh/duo_pop_room_${upperCode}/json?poll=1`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const text = await res.text();
+        const lines = text.trim().split('\n');
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const parsed = JSON.parse(lines[i]);
+            if (parsed.event === 'message') {
+              const r = JSON.parse(parsed.message) as RoomState;
+              if (r && r.code === upperCode) {
+                store.rooms.set(upperCode, r);
+                return r;
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
+    return null;
   }
 
   // Create new room
@@ -81,11 +112,15 @@ export class RoomManager {
   }
 
   // Join room
-  public static joinRoom(
+  public static async joinRoom(
     code: string,
     player: { id: string; nickname: string; avatar: MascotId }
-  ): { success: boolean; room?: RoomState; error?: string } {
-    const room = this.getRoom(code);
+  ): Promise<{ success: boolean; room?: RoomState; error?: string }> {
+    const upperCode = code.toUpperCase();
+    let room = this.getRoom(upperCode);
+    if (!room) {
+      room = await this.getRoomAsync(upperCode);
+    }
     if (!room) {
       return { success: false, error: 'ไม่พบห้องที่ระบุ กรุณาตรวจสอบรหัสห้องอีกครั้ง' };
     }
@@ -106,10 +141,23 @@ export class RoomManager {
       return { success: false, error: 'ห้องนี้เต็มแล้ว (จำกัด 2 ผู้เล่น)' };
     }
 
+    // Ensure distinct default nickname and avatar if identical to host
+    let assignedNickname = player.nickname;
+    let assignedAvatar = player.avatar;
+    if (room.players.length === 1) {
+      const host = room.players[0];
+      if (assignedNickname === host.nickname) {
+        assignedNickname = 'กระต่ายนุ๊ก';
+      }
+      if (assignedAvatar === host.avatar) {
+        assignedAvatar = host.avatar === 'cat' ? 'bunny' : 'cat';
+      }
+    }
+
     const newPlayer: Player = {
       id: player.id,
-      nickname: player.nickname,
-      avatar: player.avatar,
+      nickname: assignedNickname,
+      avatar: assignedAvatar,
       isHost: false,
       isReady: false,
       score: 0,
@@ -676,6 +724,7 @@ export class RoomManager {
     const room = store.rooms.get(upperCode);
     if (!room) return;
 
+    // 1. Local subscribers
     const set = store.subscribers.get(upperCode);
     if (set) {
       set.forEach((cb) => {
@@ -684,5 +733,14 @@ export class RoomManager {
         } catch {}
       });
     }
+
+    // 2. Cloud Relay Broadcast for instant cross-device & cross-lambda sync
+    try {
+      fetch(`https://ntfy.sh/duo_pop_room_${upperCode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(room),
+      }).catch(() => {});
+    } catch {}
   }
 }
