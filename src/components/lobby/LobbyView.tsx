@@ -15,6 +15,7 @@ interface LobbyViewProps {
   onToggleRandom: () => void;
   onStartGame: () => void;
   onChangeAvatar: () => void;
+  onKickPlayer?: (userId: string) => void;
 }
 
 export const LobbyView: React.FC<LobbyViewProps> = ({
@@ -25,6 +26,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   onToggleRandom,
   onStartGame,
   onChangeAvatar,
+  onKickPlayer,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -130,7 +132,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                     onClick={onChangeAvatar}
                     className="text-[10px] font-bold text-[#9F82F7] hover:underline cursor-pointer"
                   >
-                    เปลี่ยนตัวละคร
+                    แก้ไขชื่อ / ตัวละคร ✏️
                   </button>
                 )}
               </div>
@@ -167,7 +169,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                   )}
                 </div>
 
-                <div className="mt-1 flex items-center gap-2">
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
                   <span
                     className={`text-[11px] font-black px-2 py-0.5 rounded-full ${
                       guestPlayer.isReady
@@ -183,7 +185,21 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                       onClick={onChangeAvatar}
                       className="text-[10px] font-bold text-[#9F82F7] hover:underline cursor-pointer"
                     >
-                      เปลี่ยนตัวละคร
+                      แก้ไขชื่อ / ตัวละคร ✏️
+                    </button>
+                  )}
+
+                  {isHost && guestPlayer.id !== currentUserId && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`ต้องการเตะ ${guestPlayer.nickname} ออกจากห้องหรือไม่?`)) {
+                          onKickPlayer?.(guestPlayer.id);
+                        }
+                      }}
+                      className="text-[10px] font-bold text-[#FF5A5A] hover:bg-[#FFEAEA] px-2 py-0.5 rounded-full border border-[#FFD2D2] transition-colors cursor-pointer ml-auto"
+                      title="เตะผู้เล่นนี้ออกจากห้อง"
+                    >
+                      เตะออก ✕
                     </button>
                   )}
                 </div>

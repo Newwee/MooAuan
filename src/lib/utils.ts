@@ -6,6 +6,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Obfuscated cloud relay topic for rooms (protects from topic scrapers)
+export function getCloudTopic(code: string): string {
+  const upper = code.toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < upper.length; i++) {
+    hash = (hash << 5) - hash + upper.charCodeAt(i);
+    hash |= 0;
+  }
+  const cleanHash = Math.abs(hash).toString(36);
+  return `duo_pop_v3_${upper}_${cleanHash}`;
+}
+
 // Generate human-friendly 6-character room code without ambiguous characters (0, O, 1, I, L)
 export function generateRoomCode(): string {
   const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';

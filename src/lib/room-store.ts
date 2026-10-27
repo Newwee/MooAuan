@@ -39,6 +39,17 @@ if (!global.__DUO_POP_ROOM_STORE__) {
 
 const store = global.__DUO_POP_ROOM_STORE__;
 
+export function getCloudTopic(code: string): string {
+  const upper = code.toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < upper.length; i++) {
+    hash = (hash << 5) - hash + upper.charCodeAt(i);
+    hash |= 0;
+  }
+  const cleanHash = Math.abs(hash).toString(36);
+  return `duo_pop_v3_${upper}_${cleanHash}`;
+}
+
 export class RoomManager {
   // Get room by code (sync)
   public static getRoom(code: string): RoomState | null {
@@ -52,7 +63,8 @@ export class RoomManager {
     if (local) return local;
 
     try {
-      const res = await fetch(`https://ntfy.sh/duo_pop_room_${upperCode}/json?poll=1`, {
+      const topic = getCloudTopic(upperCode);
+      const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`, {
         cache: 'no-store',
       });
       if (res.ok) {
@@ -251,6 +263,7 @@ export class RoomManager {
     if (type === 'same-brain') {
       const questions = getRandomQuestions(5);
       base.sameBrain = {
+        questions,
         currentQuestion: questions[0],
         questionIndex: 0,
         totalQuestions: questions.length,
@@ -308,13 +321,15 @@ export class RoomManager {
 
     sb.answers[userId] = optionId;
 
-    // Check if both players answered
-    const playerIds = room.players.map((p) => p.id);
-    const bothAnswered = playerIds.length === 2 && playerIds.every((id) => sb.answers[id]);
+    // Check if both active players (first 2 players) answered
+    const activePlayers = room.players.slice(0, 2);
+    const bothAnswered =
+      activePlayers.length >= 2 && activePlayers.every((p) => Boolean(sb.answers[p.id]));
 
     if (bothAnswered) {
       sb.revealed = true;
-      const [p1, p2] = playerIds;
+      const p1 = activePlayers[0].id;
+      const p2 = activePlayers[1].id;
       const matched = sb.answers[p1] === sb.answers[p2];
 
       if (matched) {
@@ -353,16 +368,35 @@ export class RoomManager {
     if (!sb || !sb.revealed) return null;
 
     if (sb.questionIndex + 1 < sb.totalQuestions) {
-      const nextIdx = sb.questionIndex + 1;
-      const questions = getRandomQuestions(sb.totalQuestions);
-      sb.questionIndex = nextIdx;
-      sb.currentQuestion = questions[nextIdx] || questions[0];
+      sb.questionIndex++;
+      if (sb.questions && sb.questions[sb.questionIndex]) {
+        sb.currentQuestion = sb.questions[sb.questionIndex];
+      } else {
+        const fallback = getRandomQuestions(sb.totalQuestions);
+        sb.currentQuestion = fallback[sb.questionIndex] || fallback[0];
+      }
       sb.answers = {};
       sb.revealed = false;
     } else {
       room.activeGame.status = 'finished';
+      room.activeGame.winnerUserId = 'tie';
     }
 
+    room.version++;
+    this.notify(room.code);
+    return room;
+  }
+
+  // Kick Player (Host only)
+  public static kickPlayer(code: string, hostUserId: string, targetUserId: string): RoomState | null {
+    const room = this.getRoom(code);
+    if (!room) return null;
+
+    const host = room.players.find((p) => p.id === hostUserId);
+    if (!host || !host.isHost) return null;
+    if (hostUserId === targetUserId) return null;
+
+    room.players = room.players.filter((p) => p.id !== targetUserId);
     room.version++;
     this.notify(room.code);
     return room;
@@ -736,7 +770,8 @@ export class RoomManager {
 
     // 2. Cloud Relay Broadcast for instant cross-device & cross-lambda sync
     try {
-      fetch(`https://ntfy.sh/duo_pop_room_${upperCode}`, {
+      const topic = getCloudTopic(upperCode);
+      fetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(room),

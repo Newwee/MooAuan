@@ -2,6 +2,24 @@
 
 All notable changes to the **DUO POP / MooAuan** project will be documented in this file.
 
+## [1.0.2] - 2026-10-27
+
+### Fixed
+- **Same Brain Game Round Progression ("กดทั้งคู่แต่เกมไม่ไปต่อ")**:
+  - Fixed client state lingering where `selectedLocal` was retained across rounds, preventing players from clicking answers on subsequent questions. Replaced with pure derived state `selectedAnswer?.questionIndex === state.questionIndex`.
+  - Added an automatic 4-second countdown timer upon answer reveal that auto-advances both players without requiring manual clicks, while retaining the instant "คำถามถัดไป ➔" button for fast skipping.
+  - Fixed server-side question progression: questions are now stored on room initialization (`sb.questions`), avoiding reshuffling on every round.
+  - Fixed dual-answer detection by checking active room players (`slice(0, 2)`).
+- **Bot / Link Crawler Auto-Joining Rooms ("เวลาสร้างห้องชอบมีเหมือนบอทเข้ามา")**:
+  - Removed unconditional `POST /api/rooms/[code]` on room URL mount. Initial page load now performs a safe read-only `GET` request.
+  - Added an interactive **"คำเชิญเข้าห้อง (Join Room Invitation)"** card for visitors not yet in the room. Joining requires a real human click on "เข้าร่วมห้องเลย! 💖", which web crawlers and link preview bots never execute.
+  - Added Host "เตะออก ✕ (Kick Player)" feature in `LobbyView` to instantly expel any unwanted or accidental joins.
+  - Obfuscated cloud relay topic using salted room hash (`getCloudTopic(code)`) to prevent public topic scanners from snooping or injecting events.
+- **Direct Nickname Customization ("สามารถตั้งชื่อเล่นได้ด้วย")**:
+  - Added a prominent **"🏷️ ตั้งชื่อเล่นของคุณ (Nickname)"** text input directly in the Homepage Hero section with live local persistence.
+  - Added direct nickname input inside the Join Room Invitation card on `/room/[code]` so guests joining via shared links can type their nickname before entering.
+  - Enhanced lobby cards with a clear "แก้ไขชื่อ / ตัวละคร ✏️" button for both Host and Guest to edit their profile anytime.
+
 ## [1.0.1] - 2026-10-27
 
 ### Fixed

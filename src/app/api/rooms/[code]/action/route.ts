@@ -102,6 +102,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         updatedRoom = RoomManager.dismissPrank(code);
         break;
 
+      case 'kick-player':
+        if (payload?.targetUserId) {
+          updatedRoom = RoomManager.kickPlayer(code, userId, String(payload.targetUserId));
+        }
+        break;
+
       default:
         return NextResponse.json({ error: 'ไม่พบคำสั่งที่ระบุ' }, { status: 400 });
     }

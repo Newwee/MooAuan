@@ -40,6 +40,7 @@ export interface MemoryCard {
 export type RpsChoice = 'rock' | 'paper' | 'scissors';
 
 export interface SameBrainState {
+  questions?: QuestionData[];
   currentQuestion: QuestionData;
   questionIndex: number;
   totalQuestions: number;

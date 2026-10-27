@@ -24,18 +24,32 @@ export const SameBrainGame: React.FC<SameBrainGameProps> = ({
   onSubmitAnswer,
   onNextQuestion,
 }) => {
-  const [selectedLocal, setSelectedLocal] = useState<string | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<{
+    questionIndex: number;
+    optionId: string;
+  } | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(4);
+
+  // Derive local selection based on current question index (pure render, no effect needed)
+  const localChoice =
+    selectedAnswer?.questionIndex === state.questionIndex
+      ? selectedAnswer.optionId
+      : null;
 
   const me = players.find((p) => p.id === currentUserId) || players[0];
-  const opponent = players.find((p) => p.id !== currentUserId) || players[1] || players[0];
+  const opponent =
+    players.find((p) => p.id !== currentUserId) ||
+    players.find((p) => p.id !== me?.id) ||
+    players[1] ||
+    me;
 
-  const myAnswerId = state.answers[currentUserId] || selectedLocal;
-  const opponentAnswerId = state.answers[opponent.id];
+  const myAnswerId = state.answers[currentUserId] || localChoice;
+  const opponentAnswerId = opponent ? state.answers[opponent.id] : null;
   const isOpponentAnswered = Boolean(opponentAnswerId);
 
   const handleSelectOption = (optId: string) => {
     if (myAnswerId || state.revealed) return;
-    setSelectedLocal(optId);
+    setSelectedAnswer({ questionIndex: state.questionIndex, optionId: optId });
     sound.pop();
     onSubmitAnswer(optId);
   };
@@ -43,6 +57,7 @@ export const SameBrainGame: React.FC<SameBrainGameProps> = ({
   const isMatched =
     state.revealed &&
     state.answers[me.id] &&
+    opponent &&
     state.answers[me.id] === state.answers[opponent.id];
 
   React.useEffect(() => {
@@ -60,6 +75,24 @@ export const SameBrainGame: React.FC<SameBrainGameProps> = ({
       }
     }
   }, [state.revealed, isMatched]);
+
+  // Auto-advance countdown timer when answers are revealed
+  React.useEffect(() => {
+    if (!state.revealed) return;
+
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onNextQuestion();
+          return 4;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [state.revealed, onNextQuestion]);
 
   const question = state.currentQuestion;
 
@@ -201,13 +234,13 @@ export const SameBrainGame: React.FC<SameBrainGameProps> = ({
             </div>
           )}
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-col items-center gap-2">
             <Button
               variant="pink"
               size="md"
               onClick={() => {
                 sound.tap();
-                setSelectedLocal(null);
+                setSecondsLeft(4);
                 onNextQuestion();
               }}
             >
@@ -215,6 +248,9 @@ export const SameBrainGame: React.FC<SameBrainGameProps> = ({
                 ? 'คำถามถัดไป ➔'
                 : 'ดูผลคะแนนรวม 🏆'}
             </Button>
+            <p className="text-[11px] font-bold text-[#716280] animate-pulse">
+              กำลังไปข้อถัดไปอัตโนมัติใน {secondsLeft} วินาที... (หรือกดปุ่มเพื่อข้าม)
+            </p>
           </div>
         </Card>
       )}

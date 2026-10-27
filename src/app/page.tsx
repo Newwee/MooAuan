@@ -145,19 +145,40 @@ export default function HomePage() {
             เว็บเกมเล่น 2 คนสำหรับคู่รักและเพื่อนสนิท ไม่ต้องโหลดแอป แค่ส่งลิงก์ก็เล่นด้วยกันได้ทันที!
           </p>
 
-          {/* Current Profile Pill */}
-          <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/90 border-2 border-[#FFD2E2] shadow-sm">
-            <Avatar id={avatar} size="xs" animate={false} />
-            <span className="text-xs font-bold text-[#41364F]">{nickname}</span>
+          {/* Direct Nickname & Character Setup Box */}
+          <div className="max-w-md mx-auto p-3.5 rounded-3xl bg-white/95 border-2 border-[#FFD2E2] shadow-md flex items-center gap-3">
             <button
+              type="button"
               onClick={() => {
                 sound.pop();
                 setIsPickerOpen(true);
               }}
-              className="text-xs font-bold text-[#FF8EB2] hover:underline cursor-pointer ml-1"
+              className="relative shrink-0 p-1.5 rounded-2xl bg-[#FFEBF2] hover:bg-[#FFDCE8] transition-all cursor-pointer group"
+              title="คลิกเพื่อเปลี่ยนมาสคอต"
             >
-              แก้ไขตัวละคร ✨
+              <Avatar id={avatar} size="md" />
+              <span className="absolute -bottom-1 -right-1 text-[10px] bg-[#FF8EB2] text-white px-1.5 py-0.5 rounded-full font-black shadow-sm">
+                เปลี่ยน
+              </span>
             </button>
+
+            <div className="flex-1 text-left min-w-0">
+              <label className="block text-[11px] font-bold text-[#716280] mb-0.5">
+                🏷️ ตั้งชื่อเล่นของคุณ (Nickname)
+              </label>
+              <input
+                type="text"
+                value={nickname}
+                onChange={(e) => {
+                  const val = e.target.value.slice(0, 15);
+                  setNickname(val);
+                  saveStoredNickname(val);
+                }}
+                placeholder="พิมพ์ชื่อเล่นของคุณที่นี่..."
+                className="w-full px-3 py-1.5 rounded-xl border border-[#FFD2E2] bg-[#FFF9F6] text-[#41364F] text-sm font-black focus:outline-none focus:border-[#FF8EB2] focus:bg-white focus:ring-2 focus:ring-[#FF8EB2]/30 transition-all"
+                maxLength={15}
+              />
+            </div>
           </div>
         </div>
 
